@@ -1,6 +1,7 @@
 """Take huge detailed screenshots of Google Maps."""
 
 from datetime import datetime
+import os
 import time
 import tkinter
 
@@ -11,9 +12,10 @@ from selenium import webdriver
 
 def create_map(lat_start: float, long_start: float,
                number_rows: int, number_cols: int,
-               scale: float=1, sleep_time: float=3,
-               offset_left: float=0.05, offset_top: float=0.17,
-               offset_right: float=0.03, offset_bottom: float=0.09):
+               scale: float=1, sleep_time: float=0,
+               offset_left: float=0, offset_top: float=0,
+               offset_right: float=0, offset_bottom: float=0,
+               outfile: str=None):
     """Create a big Google Map image from a grid of screenshots.
 
     ARGS:
@@ -36,7 +38,16 @@ def create_map(lat_start: float, long_start: float,
             search box, compass/zoom buttons). Defaults are set for an
             Ubuntu laptop with left-side taskbar, and will need to be
             tuned to the specific machine and setup where it will be run.
+        outfile: If provided, the program will save the final image to
+            this filepath. Otherwise, it will be saved in the current
+            working directory with name 'testimg-<timestamp>.png'
     """
+    if outfile:
+        # Make sure the path doesn't exist, is writable, and is a .PNG
+        assert not os.path.exists(outfile)
+        assert os.access(os.path.dirname(os.path.abspath(outfile)), os.W_OK)
+        assert outfile.upper().endswith('.PNG')
+
     driver = webdriver.Firefox()
     driver.maximize_window()
     # 2D grid of Images to be stitched together
@@ -61,18 +72,21 @@ def create_map(lat_start: float, long_start: float,
             driver.get(url)
             # Let the map load all assets before taking a screenshot
             time.sleep(sleep_time)
-            images[row][col] = screenshot(screen_width, screen_height,
-                                          offset_left, offset_top,
-                                          offset_right, offset_bottom)
+            image = screenshot(screen_width, screen_height,
+                               offset_left, offset_top,
+                               offset_right, offset_bottom)
+            # Scale image up or down if desired, then save in memory
+            images[row][col] = scale_image(image, scale)
 
     driver.close()
     driver.quit()
 
-    # Scale up or down all the images, then combine and save them
-    images = [[scale_image(img, scale) for img in row] for row in images]
+    # Combine all the images into one, then save it to disk
     final = combine_images(images)
-    timestamp = datetime.now().strftime('%Y-%m-%dT%H-%M-%S')
-    final.save('testimg-{}.png'.format(timestamp))
+    if not outfile:
+        timestamp = datetime.now().strftime('%Y-%m-%dT%H-%M-%S')
+        outfile = 'testimg-{}.png'.format(timestamp)
+    final.save(outfile)
 
 
 def get_screen_resolution() -> tuple:
